@@ -26,7 +26,8 @@ var (
 		"Accept":       "*/*",
 		"Content-Type": "application/x-www-form-urlencoded",
 	}
-	jar = &cookiejar.Jar{}
+	jar         = &cookiejar.Jar{}
+	maxAttempts = 2
 )
 
 func main() {
@@ -41,7 +42,7 @@ func handler(ctx context.Context) error {
 	}
 
 	// Check if there are any förråd.
-	new, err := forrad(client, headers)
+	new, err := forrad(client, headers, 0)
 	if err != nil {
 		return err
 	}
@@ -157,8 +158,12 @@ func createLoginPayload() ([]byte, error) {
 }
 
 // forrad will check if there are any förråd avaible. Returns true if this is the case.
+// Since we use recursion for the login have a maxattempts.
 // Returns bool and error.
-func forrad(client *http.Client, headers map[string]string) (bool, error) {
+func forrad(client *http.Client, headers map[string]string, attempt int) (bool, error) {
+	if attempt == maxAttempts {
+		return false, fmt.Errorf("max attempts reached %d for fetching förråd", attempt)
+	}
 	// Create the request.
 	req, err := createHTTPRequest("GET", "https://www.stockholmshem.se/widgets/?callback=jQuery17105048823634686723_{epoch}&widgets%5B%5D=alert&widgets%5B%5D=objektlista%40forrad&_={epoch}", nil, headers)
 	if err != nil {
@@ -168,15 +173,16 @@ func forrad(client *http.Client, headers map[string]string) (bool, error) {
 	// Send the request.
 	body, err := sendHTTPRequest(client, req, 200)
 	if err != nil {
-		if strings.Contains(err.Error(), fmt.Sprintf("status code missmatch. wanted %d got %d", 200, 302)) {
-			// If error is 302 we most likely need to login.
-			log.Printf("New login needed!\n")
-			if err := login(client, headers); err != nil {
-				return false, err
-			}
-			return forrad(client, headers)
-		}
 		return false, err
+	}
+
+	// Do we need to login?
+	if !strings.Contains(string(body), "objektlista@forrad") {
+		log.Printf("New login needed! Attempting to login\n")
+		if err := login(client, headers); err != nil {
+			return false, err
+		}
+		return forrad(client, headers, attempt+1)
 	}
 
 	// Search string.
@@ -188,6 +194,7 @@ func forrad(client *http.Client, headers map[string]string) (bool, error) {
 func send(ctx context.Context, new bool) error {
 	// If there are no new just return nil.
 	if !new {
+		log.Printf("No new förråd detected!\n")
 		return nil
 	}
 
