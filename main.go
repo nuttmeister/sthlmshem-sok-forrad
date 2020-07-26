@@ -26,8 +26,8 @@ var (
 		"Accept":       "*/*",
 		"Content-Type": "application/x-www-form-urlencoded",
 	}
-	jar         = &cookiejar.Jar{}
-	maxAttempts = 2
+	maxAttempts                = 2
+	jar         *cookiejar.Jar = nil
 )
 
 func main() {
@@ -54,11 +54,13 @@ func handler(ctx context.Context) error {
 // createHTTPClient will create an new http client with a cookie jar with timeout in milliseconds.
 // Returns *http.Client and error.
 func createHTTPClient(timeout int) (*http.Client, error) {
-	j, err := cookiejar.New(nil)
-	if err != nil {
-		return nil, fmt.Errorf("couldn't create cookie jar. %s", err.Error())
+	if jar == nil {
+		j, err := cookiejar.New(nil)
+		if err != nil {
+			return nil, fmt.Errorf("couldn't create cookie jar. %s", err.Error())
+		}
+		jar = j
 	}
-	jar = j
 
 	return &http.Client{
 		Jar:     jar,
