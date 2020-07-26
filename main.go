@@ -14,6 +14,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/aws/external"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchevents"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 )
 
@@ -203,9 +204,16 @@ func send(ctx context.Context, new bool) error {
 	// Simple log that we there are new förråd.
 	log.Printf("New förråd detected!\n")
 
+	// Get ARN for the SNS topic.
 	topic, ok := os.LookupEnv("TOPIC")
 	if !ok {
 		return fmt.Errorf("couldn't get TOPIC from environment")
+	}
+
+	// Get ARN for the CW Event.
+	event, ok := os.LookupEnv("EVENT")
+	if !ok {
+		return fmt.Errorf("couldn't get EVENT from environment")
 	}
 
 	// Configure AWS config.
@@ -215,16 +223,27 @@ func send(ctx context.Context, new bool) error {
 	}
 
 	// Configure SNS.
-	svc := sns.New(cfg)
+	snsClient := sns.New(cfg)
+
+	// Configure CW.
+	cwClient := cloudwatchevents.New(cfg)
 
 	// Send the message.
-	_, err = svc.PublishRequest(&sns.PublishInput{
+	_, err = snsClient.PublishRequest(&sns.PublishInput{
 		Subject:  &snsSubject,
 		Message:  &snsMessage,
 		TopicArn: &topic,
 	}).Send(ctx)
 	if err != nil {
 		return fmt.Errorf("couldn't publish to sns. %s", err.Error())
+	}
+
+	// Disable the CW event triggering this lambda.
+	_, err = cwClient.DisableRuleRequest(&cloudwatchevents.DisableRuleInput{
+		Name: &event,
+	}).Send(ctx)
+	if err != nil {
+		return fmt.Errorf("couldn't disable cw event. %s", err.Error())
 	}
 
 	return nil
