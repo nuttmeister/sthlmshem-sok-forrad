@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"os"
@@ -184,6 +185,9 @@ func send(ctx context.Context, new bool) error {
 	if !new {
 		return nil
 	}
+
+	// Simple log that we there are new förråd.
+	log.Printf("New förråd detected!\n")
 
 	topic, ok := os.LookupEnv("TOPIC")
 	if !ok {
