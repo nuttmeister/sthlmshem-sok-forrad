@@ -26,6 +26,7 @@ var (
 		"Accept":       "*/*",
 		"Content-Type": "application/x-www-form-urlencoded",
 	}
+	jar = &cookiejar.Jar{}
 )
 
 func main() {
@@ -36,11 +37,6 @@ func handler(ctx context.Context) error {
 	// Create the http client.
 	client, err := createHTTPClient(10000)
 	if err != nil {
-		return err
-	}
-
-	// Login against stockholmshem.
-	if err := login(client, headers); err != nil {
 		return err
 	}
 
@@ -57,10 +53,11 @@ func handler(ctx context.Context) error {
 // createHTTPClient will create an new http client with a cookie jar with timeout in milliseconds.
 // Returns *http.Client and error.
 func createHTTPClient(timeout int) (*http.Client, error) {
-	jar, err := cookiejar.New(nil)
+	j, err := cookiejar.New(nil)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't create cookie jar. %s", err.Error())
 	}
+	jar = j
 
 	return &http.Client{
 		Jar:     jar,
@@ -171,6 +168,14 @@ func forrad(client *http.Client, headers map[string]string) (bool, error) {
 	// Send the request.
 	body, err := sendHTTPRequest(client, req, 200)
 	if err != nil {
+		if strings.Contains(err.Error(), fmt.Sprintf("status code missmatch. wanted %d got %d", 200, 302)) {
+			// If error is 302 we most likely need to login.
+			log.Printf("New login needed!\n")
+			if err := login(client, headers); err != nil {
+				return false, err
+			}
+			return forrad(client, headers)
+		}
 		return false, err
 	}
 
